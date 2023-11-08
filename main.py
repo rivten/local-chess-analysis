@@ -8,10 +8,10 @@ import math
 import enum
 import pyperclip
 import os
+import matplotlib.pyplot as plt
 
 # TODO
 # - logging instead of print
-# - graph of the score in centipawns after the game (or in expectation)
 # - using argparse properly
 
 def games():
@@ -63,25 +63,36 @@ def get_move_assessment(score_before, score_after, ply):
 def lichess_fen(fen, main_player_color):
     return f'https://lichess.org/analysis/{fen.replace(" ", "_")}?color={"white" if main_player_color == chess.WHITE else "black"}'
 
+# TODO: figure out why there is a +1 and +2 here
+def beautiful_san_move(san, ply):
+    if ply % 2 == 0:
+        return f'{int(ply / 2) + 1}..{san}'
+    else:
+        return f'{int(ply / 2) + 2}.{san}'
+
 def analyze_game(game, engine):
     print(game.headers)
     main_player_color = get_main_player_color(game.headers)
     print("main_player is white ?", main_player_color)
 
+    win_percent_data = []
+    annotations = []
+
     board = game.board()
     score_before_my_turn = chess.engine.Cp(0)
     score_after_my_turn = chess.engine.Cp(0)
-    #for move in tqdm.tqdm(list(game.mainline_moves())):
-    for ply, move in enumerate(game.mainline_moves()):
+    for ply, move in tqdm.tqdm(list(enumerate(game.mainline_moves()))):
         san_move = board.san(move)
-        if ply % 2 == 0:
-            print(f'{int(ply / 2) + 1}.{san_move}')
-        else:
-            print(f'{int(ply / 2) + 1}..{san_move}')
+        #if ply % 2 == 0:
+        #    print(f'{int(ply / 2) + 1}.{san_move}')
+        #else:
+        #    print(f'{int(ply / 2) + 1}..{san_move}')
         fen = board.fen()
         board.push(move)
         engine_eval_result = engine.play(board, chess.engine.Limit(depth=24), info = chess.engine.Info.SCORE)
         score = engine_eval_result.info['score'].pov(main_player_color)
+        win_percent = score.wdl(ply=ply+1).expectation()
+        win_percent_data.append(win_percent)
         #print('Score is', score)
         if board.turn == main_player_color:
             # my opponent just played
@@ -90,29 +101,58 @@ def analyze_game(game, engine):
             # i just played
             score_after_my_turn = score
             move_assessment = get_move_assessment(score_before_my_turn, score_after_my_turn, ply + 1)
-            if move_assessment == MoveAssessment.BLUNDER:
-                print("blunder")
-                print(fen)
-                print(lichess_fen(fen, main_player_color))
-                print(f"Move {san_move} was played in this position")
-                #blunders.append({
-                #    "game": game,
-                #    "ply": ply,
-                #    "fen": fen,
-                #    "score_before": score_before_my_turn,
-                #    "score_after": score_after_my_turn,
-                #    "move_san_played": san_move,
-                #})
-                #print(blunders)
-            elif move_assessment == MoveAssessment.MISTAKE:
-                print("mistake")
-                print(fen)
-                print(lichess_fen(fen, main_player_color))
-                print(f"Move {san_move} was played in this position")
+            if move_assessment != MoveAssessment.NONE:
+                annotations.append(
+                    {
+                        "type": "blunder" if move_assessment == MoveAssessment.BLUNDER else "mistake",
+                        "ply": ply - 1,
+                        "san": san_move,
+                        "win%": score_before_my_turn.wdl(ply=ply).expectation(),
+                        "fen": fen,
+                    }
+                )
+            #if move_assessment == MoveAssessment.BLUNDER:
+            #    print("blunder")
+            #    print(fen)
+            #    print(lichess_fen(fen, main_player_color))
+            #    print(f"Move {san_move} was played in this position")
+            #    #blunders.append({
+            #    #    "game": game,
+            #    #    "ply": ply,
+            #    #    "fen": fen,
+            #    #    "score_before": score_before_my_turn,
+            #    #    "score_after": score_after_my_turn,
+            #    #    "move_san_played": san_move,
+            #    #})
+            #    #print(blunders)
+            #elif move_assessment == MoveAssessment.MISTAKE:
+            #    print("mistake")
+            #    print(fen)
+            #    print(lichess_fen(fen, main_player_color))
+            #    print(f"Move {san_move} was played in this position")
+    #print(win_percent_data)
+    for annotation in annotations:
+        print(f'{beautiful_san_move(annotation["san"], annotation["ply"])}:{annotation["type"]}: {lichess_fen(annotation["fen"], main_player_color)}')
+    plt.plot(win_percent_data)
+    plt.scatter(
+        [annotation['ply'] for annotation in annotations if annotation['type'] == 'blunder'],
+        [annotation['win%'] for annotation in annotations if annotation['type'] == 'blunder'],
+        c='r',
+    )
+    plt.scatter(
+        [annotation['ply'] for annotation in annotations if annotation['type'] == 'mistake'],
+        [annotation['win%'] for annotation in annotations if annotation['type'] == 'mistake'],
+        c='orange',
+    )
+    for annotation in annotations:
+        plt.annotate(beautiful_san_move(annotation['san'], annotation['ply']), (annotation['ply'], annotation['win%']))
+    plt.axhline(y = 0.5, color = 'black', linestyle='-')
+    plt.show()
+
 
 if __name__ == "__main__":
-    engine = chess.engine.SimpleEngine.popen_uci('stockfish')
-    engine.configure({'Threads': '3'})
+    engine = chess.engine.SimpleEngine.popen_uci(os.getenv("STOCKFISH_PATH", 'stockfish'))
+    engine.configure({'Threads': os.getenv("STOCKFISH_THREADS", '3')})
     blunders = []
     paste = pyperclip.paste()
     if paste == "":
