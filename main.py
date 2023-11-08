@@ -2,6 +2,7 @@ import chess
 import chess.pgn
 import chess.engine
 import io
+import tomllib
 import tqdm
 import sys
 import math
@@ -14,15 +15,21 @@ import matplotlib.pyplot as plt
 # - logging instead of print
 # - using argparse properly
 
+
+with open("config.toml", "rb") as f:
+    config = tomllib.load(f)
+
+print(config)
+
 def games():
     while True:
         game = chess.pgn.read_game(sys.stdin)
         yield game
 
 def get_main_player_color(headers):
-    if headers['White'].lower() == os.getenv("PLAYER_NAME"):
+    if headers['White'].lower() == config["player_name"]:
         return chess.WHITE
-    elif headers['Black'].lower() == os.getenv("PLAYER_NAME"):
+    elif headers['Black'].lower() == config["player_name"]:
         return chess.BLACK
     else:
         print("main_player not found")
@@ -38,7 +45,7 @@ def get_win_percent(score, ply):
     #else:
     #    # taken from: https://chess.stackexchange.com/questions/41396/is-there-a-way-to-get-blunders-mistakes-and-inaccuracies-using-stockfish
     #    return 0.5 + 0.5 * ((2 / (1 + math.exp(-0.00368208 * score.score()))) - 1)
-    return score.wdl(ply=ply).expectation()
+    return score.wdl(model=config["wdl_model"], ply=ply).expectation()
 
 
 class MoveAssessment(enum.Enum):
@@ -93,9 +100,9 @@ def analyze_game(game, engine):
         #    print(f'{int(ply / 2) + 1}..{san_move}')
         fen = board.fen()
         board.push(move)
-        engine_eval_result = engine.play(board, chess.engine.Limit(depth=24), info = chess.engine.Info.SCORE)
+        engine_eval_result = engine.play(board, chess.engine.Limit(depth=config["stockfish_depth"]), info = chess.engine.Info.SCORE)
         score = engine_eval_result.info['score'].pov(main_player_color)
-        win_percent = score.wdl(ply=ply+1).expectation()
+        win_percent = get_win_percent(score, ply+1)
         win_percent_data.append(win_percent)
         #print('Score is', score)
         if board.turn == main_player_color:
@@ -111,7 +118,7 @@ def analyze_game(game, engine):
                         "type": "blunder" if move_assessment == MoveAssessment.BLUNDER else "mistake",
                         "ply": ply - 1,
                         "san": san_move,
-                        "win%": score_before_my_turn.wdl(ply=ply).expectation(),
+                        "win%": get_win_percent(score_before_my_turn, ply),
                         "fen": fen,
                     }
                 )
@@ -157,8 +164,8 @@ def analyze_game(game, engine):
 
 
 if __name__ == "__main__":
-    engine = chess.engine.SimpleEngine.popen_uci(os.getenv("STOCKFISH_PATH", 'stockfish'))
-    engine.configure({'Threads': os.getenv("STOCKFISH_THREADS", '3')})
+    engine = chess.engine.SimpleEngine.popen_uci(config["stockfish_path"])
+    engine.configure({'Threads': os.getenv("STOCKFISH_THREADS", config["stockfish_threads"])})
     blunders = []
     paste = pyperclip.paste()
     if paste == "":
