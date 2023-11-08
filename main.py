@@ -70,6 +70,11 @@ def beautiful_san_move(san, ply):
     else:
         return f'{int(ply / 2) + 2}.{san}'
 
+def lichess_analysis_full(game):
+    exporter = chess.pgn.StringExporter(headers=False, variations=False, comments=False)
+    game_url = game.accept(exporter).replace(" ", "%20").replace("\n", "")
+    return f'https://lichess.org/paste?pgn={game_url}'
+
 def analyze_game(game, engine):
     print(game.headers)
     main_player_color = get_main_player_color(game.headers)
@@ -81,6 +86,7 @@ def analyze_game(game, engine):
     board = game.board()
     score_before_my_turn = chess.engine.Cp(0)
     score_after_my_turn = chess.engine.Cp(0)
+    print(lichess_analysis_full(game))
     for ply, move in tqdm.tqdm(list(enumerate(game.mainline_moves()))):
         san_move = board.san(move)
         #if ply % 2 == 0:
@@ -147,6 +153,8 @@ def analyze_game(game, engine):
     for annotation in annotations:
         plt.annotate(beautiful_san_move(annotation['san'], annotation['ply']), (annotation['ply'], annotation['win%']))
     plt.axhline(y = 0.5, color = 'black', linestyle='-')
+    ax = plt.gca()
+    ax.set_ylim([0.0, 1.0])
     plt.show()
 
 
