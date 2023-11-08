@@ -51,11 +51,9 @@ def get_move_assessment(score_before, score_after, ply):
     win_percent_after = get_win_percent(score_after, ply)
     win_percent_change = win_percent_after - win_percent_before
 
-    win_percent_change_abs = abs(win_percent_change)
-
-    if win_percent_change_abs > 0.2:
+    if win_percent_change < -0.2:
         return MoveAssessment.BLUNDER
-    elif win_percent_change_abs > 0.1:
+    elif win_percent_change < -0.1:
         return MoveAssessment.MISTAKE
     else:
         return MoveAssessment.NONE
