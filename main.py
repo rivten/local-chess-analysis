@@ -10,6 +10,7 @@ import enum
 import pyperclip
 import os
 import matplotlib.pyplot as plt
+import csv
 
 # TODO
 # - logging instead of print
@@ -27,13 +28,21 @@ def games():
         yield game
 
 def get_main_player_color(headers):
-    if headers['White'].lower() == config["player_name"]:
+    color = input("Which color to analyze ? [w/b]")
+    if color.lower().startswith("w"):
         return chess.WHITE
-    elif headers['Black'].lower() == config["player_name"]:
+    elif color.lower().startswith("b"):
         return chess.BLACK
     else:
         print("main_player not found")
         assert(False)
+    #if headers['White'].lower() == config["player_name"]:
+    #    return chess.WHITE
+    #elif headers['Black'].lower() == config["player_name"]:
+    #    return chess.BLACK
+    #else:
+    #    print("main_player not found")
+    #    assert(False)
 
 
 def get_win_percent(score, ply):
@@ -77,16 +86,24 @@ def beautiful_san_move(san, ply):
 
 def lichess_analysis_full(game):
     exporter = chess.pgn.StringExporter(headers=False, variations=False, comments=False)
-    game_url = game.accept(exporter).replace(" ", "%20").replace("\n", "")
+    game_url = game.accept(exporter).replace("*", "").replace(" ", "%20").replace("\n", "%20")
     return f'https://lichess.org/paste?pgn={game_url}'
 
 def analyze_game(game, engine):
     print(game.headers)
     main_player_color = get_main_player_color(game.headers)
+    #if config["color"] is None:
+    #    main_player_color = get_main_player_color(game.headers)
+    #else:
+    #    if config["color"] == "white":
+    #        main_player_color = chess.WHITE
+    #    elif config["color"] == "black":
+    #        main_player_color = chess.BLACK
     print("main_player is white ?", main_player_color)
 
     win_percent_data = []
     annotations = []
+    csv_data = []
 
     board = game.board()
     score_before_my_turn = chess.engine.Cp(0)
@@ -104,6 +121,7 @@ def analyze_game(game, engine):
         score = engine_eval_result.info['score'].pov(main_player_color)
         win_percent = get_win_percent(score, ply+1)
         win_percent_data.append(win_percent)
+        csv_data.append((ply, win_percent))
         #print('Score is', score)
         if board.turn == main_player_color:
             # my opponent just played
@@ -142,6 +160,15 @@ def analyze_game(game, engine):
             #    print(lichess_fen(fen, main_player_color))
             #    print(f"Move {san_move} was played in this position")
     #print(win_percent_data)
+    #with open("game_analysis.csv", "w") as csvfile:
+    #    writer = csv.writer(csvfile)
+    #    for s in save:
+    #        writer.writerow((str(s[0]), str(s[1])))
+    with open("plot.csv", "w") as csvfile:
+        writer = csv.writer(csvfile)
+        for s in csv_data:
+            writer.writerow(s)
+
     for annotation in annotations:
         print(f'{beautiful_san_move(annotation["san"], annotation["ply"])}:{annotation["type"]}: {lichess_fen(annotation["fen"], main_player_color)}')
     plt.plot(win_percent_data)
