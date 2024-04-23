@@ -11,11 +11,11 @@ import pyperclip
 import os
 import matplotlib.pyplot as plt
 import csv
+import argparse
 
 # TODO
 # - logging instead of print
 # - using argparse properly
-
 
 with open("config.toml", "rb") as f:
     config = tomllib.load(f)
@@ -89,7 +89,7 @@ def lichess_analysis_full(game):
     game_url = game.accept(exporter).replace("*", "").replace(" ", "%20").replace("\n", "%20")
     return f'https://lichess.org/paste?pgn={game_url}'
 
-def analyze_game(game, engine):
+def analyze_game_color(game, engine):
     print(game.headers)
     main_player_color = get_main_player_color(game.headers)
     #if config["color"] is None:
@@ -189,19 +189,27 @@ def analyze_game(game, engine):
     ax.set_ylim([0.0, 1.0])
     plt.show()
 
+def genreport():
+    pass
+
 
 if __name__ == "__main__":
+    argparser = argparse.ArgumentParser()
+    argparser.add_argument("--genreport", action="store_true")
+    args = argparser.parse_args()
+    if args.genreport:
+        analyze_func = genreport
+    else:
+        analyze_func = analyze_game_color
     engine = chess.engine.SimpleEngine.popen_uci(config["stockfish_path"])
     engine.configure({'Threads': os.getenv("STOCKFISH_THREADS", config["stockfish_threads"])})
     blunders = []
     paste = pyperclip.paste()
     if paste == "":
         for game in games():
-            analyze_game(game, engine)
+            analyze_game_color(game, engine)
     else:
         raw_game = io.StringIO(paste)
         game = chess.pgn.read_game(raw_game)
-        analyze_game(game, engine)
-
-
+        analyze_game_color(game, engine)
     engine.quit()
